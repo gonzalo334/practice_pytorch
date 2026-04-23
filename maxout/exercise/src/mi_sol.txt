@@ -1,0 +1,28 @@
+self.num_units = num_units
+self.weight = torch.nn.Parameter(
+    torch.randn((num_units, output_dim, input_dim), dtype=torch.double)
+)
+self.output_dim = output_dim
+
+B, Din = inputs.shape
+inputs_repeated = inputs.unsqueeze(1).repeat(1, self.num_units, 1) # B, K, Din
+inputs_reshaped = inputs_repeated.view(self.num_units * B, 1, Din) # B*K, 1, Din
+return inputs_reshaped
+
+
+B, Din = inputs.shape
+weight_reshaped = self.weight.unsqueeze(0).repeat(B, 1, 1, 1) # B, K, Dout, Din
+weight_reshaped = weight_reshaped.view(B*self.num_units, Din, -1) # B*K, Dout, Din
+return weight_reshaped
+
+
+
+
+B, Din = inputs.shape
+outputs = torch.zeros((B, self.output_dim), dtype=inputs.dtype)
+inputs_reshaped = self.reshape_inputs(inputs) # B*K, 1, Din
+weight_reshaped = self.reshape_weight(inputs) # B*K, Din, Dout
+outputs = torch.bmm(inputs_reshaped, weight_reshaped)  # B*K, 1, Dout
+outputs = outputs.view(B, self.num_units, -1) # B, K, Dout 
+outputs = torch.amax(outputs, dim=1)
+return outputs
