@@ -28,15 +28,19 @@ class EmbeddingFuncion(torch.autograd.Function):
         Returns:
             outputs tensor. Dimensions: [batch, output dim].
         """
-
-        # compute embeddings
-        outputs: torch.Tensor = weight[inputs, :]
-
-        # save tensors for the backward
-        ctx.save_for_backward(inputs, weight, torch.tensor(padding_idx))
-
+        # TODO
+        B = len(inputs)
+        V, N = weight.shape 
+        # outputs = torch.zeros(B, N)
+        # for i in range(len(inputs)):
+        #     outputs[i , :] = weight[inputs[i]]
+        outputs = weight[inputs]
+        mask = inputs == padding_idx
+        outputs[mask] = 0
+        ctx.save_for_backward(inputs, weight, outputs)
+        ctx.padding_idx = padding_idx
         return outputs
-
+        
     @staticmethod
     def backward(  # type: ignore
         ctx: Any, grad_outputs: torch.Tensor
@@ -56,6 +60,14 @@ class EmbeddingFuncion(torch.autograd.Function):
         """
 
         # TODO
+        inputs, weight, outputs = ctx.saved_tensors
+        padding_idx = ctx.padding_idx
+        B = len(inputs)
+        V, N = weight.shape 
+        grad_weights = torch.zeros(V, N)
+        for i in range(B):
+            grad_weights[inputs[i]] += grad_outputs[i] if inputs[i] != padding_idx else 0
+        return None, grad_weights, None
 
 
 class Embedding(torch.nn.Module):

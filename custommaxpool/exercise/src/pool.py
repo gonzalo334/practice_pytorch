@@ -31,19 +31,14 @@ class CustomMaxPool2dFunction(torch.autograd.Function):
 
         # TODO
         B, Cin, H, W = inputs.shape
-        G, K = num_groups, kernel_size
+        K, G = kernel_size, num_groups
         Hout, Wout = H - K + 1, W - K + 1
-        outputs = torch.zeros((B, num_groups, Hout, Wout), dtype=inputs.dtype)
-
-        inputs_unfolded = torch.nn.functional.unfold(inputs, K) # B, Cin*K*K, Hout*Wout
-        inputs_windows = inputs_unfolded.view(B, Cin, K*K, -1) # B, Cin, K*K, Hout*Wout
-        inputs_grouped = inputs_windows.view(B, G, (Cin // G) * K*K, -1) # B, G, (Cin // G) * K, Hout*Wout
-        values, indexes = torch.max(inputs_grouped, dim=2) 
-        outputs = values.view(B, G, Hout, Wout)
-
-        ctx.G = num_groups 
+        inputs_unfolded = F.unfold(inputs, (K, K)).unsqueeze(1) # B, 1, Cin*K*K, Hout*Wout
+        inputs_windows = inputs_unfolded.view(B, G, (Cin//G) * K*K, Hout, Wout)
+        outputs, indexes = torch.max(inputs_windows, dim=2) 
+        ctx.save_for_backward(inputs, indexes)
         ctx.K = K
-        ctx.save_for_backward(inputs, outputs, indexes)
+        ctx.G = G
         return outputs
 
     @staticmethod
@@ -66,22 +61,25 @@ class CustomMaxPool2dFunction(torch.autograd.Function):
         """
 
         # TODO
-        inputs, outputs, indexes = ctx.saved_tensors
-        K, G = ctx.K, ctx.G
+        inputs, indexes = ctx.saved_tensors
+        G = ctx.G
+        K = ctx.K
         B, Cin, H, W = inputs.shape
         Hout, Wout = H - K + 1, W - K + 1
-
-        inputs_max_one_hot = torch.nn.functional.one_hot(indexes)   # B, G, Hout*Wout, (Cin // G) * K*K
-        grad_outputs_unfolded = grad_outputs.view(B, G, Hout*Wout, 1) # B, G, Hout*Wout, 1
-        grad_inputs_multiplied = grad_outputs_unfolded * inputs_max_one_hot # B, G, Hout*Wout, (Cin // G)*K*K
-        grad_inputs_transposed = grad_inputs_multiplied.view(B, G, (Cin // G)*K*K, Hout*Wout) # B, G, (Cin // G) * K*K, Hout*Wout
-        grad_inputs_transposed = grad_inputs_multiplied.transpose(2,3) # B, G, (Cin // G) * K*K, Hout*Wout
-        grad_inputs_unfolded = grad_inputs_transposed.reshape(B, Cin*K*K, Hout*Wout) # B, Cin*K*K, Hout*Wout
-        fold = torch.nn.Fold(output_size=(H, W), kernel_size=K)
-        grad_inputs = fold(grad_inputs_unfolded)
-
+        # B, G, Hout, Wout = grad_outputs.shape
+        inputs_unfolded = F.unfold(inputs, (K, K)).unsqueeze(1) # B, 1, Cin*K*K, Hout*Wout
+        inputs_windows = inputs_unfolded.view(B, G, (Cin//G) * K*K, Hout, Wout)
+        indexes_one_hot = F.one_hot(indexes, num_classes=(Cin//G)*K*K).to(inputs.dtype) # B, G, Hout, Wout, (Cin//G)*K*K
+        grad_windows = torch.zeros_like(inputs_windows, dtype=inputs.dtype)
+        grad_inputs_unfolded = torch.scatter(grad_windows, 2, indexes.unsqueeze(2), grad_outputs.unsqueeze(2)) # B, G, Hout, Wout, (Cin//G)*K*K
+        # grad_inputs_unfolded = indexes_one_hot * grad_outputs.unsqueeze(-1) # B, G, Hout, Wout, (Cin//G)*K*K
+        # grad_inputs_unfolded = torch.permute(grad_inputs_unfolded, (0, 1, 4, 2, 3)).view(B*G, (Cin//G)*K*K, Hout*Wout)
+        grad_inputs_unfolded = grad_inputs_unfolded.view(B*G, (Cin//G)*K*K, Hout*Wout)
+        grad_inputs = F.fold(grad_inputs_unfolded, (H, W), (K, K)).view(B, Cin, H, W)
         return grad_inputs, None, None
-        
+
+
+
 
 
 class CustomMaxPool2d(torch.nn.Module):

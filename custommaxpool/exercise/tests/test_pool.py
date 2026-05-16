@@ -7,7 +7,7 @@ import torch
 import pytest
 
 # Own modules
-from src.pool import CustomMaxPool2d
+from exercise.src.pool import CustomMaxPool2d
 from tests.utils import TestCustomMaxPool2d
 
 

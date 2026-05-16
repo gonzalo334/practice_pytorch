@@ -19,20 +19,40 @@ class MaxoutFunction(torch.autograd.Function):
     ) -> torch.Tensor:
         """
         This is the forward method of the Maxout layer.
+
+        Args:
+            ctx: context used to save tensors for the backward pass.
+            inputs: input tensor with shape ``[batch, input_dim]``.
+            weights: affine weights with shape
+                ``[num_units, output_dim, input_dim]``.
+            bias: affine bias with shape ``[num_units, output_dim]``.
+
+        Returns:
+            Output tensor with shape ``[batch, output_dim]`` containing the
+            maximum affine response over the ``num_units`` axis.
         """
 
         # TODO
-
+        
     @staticmethod
     def backward(  # type: ignore
         ctx: Any, grad_outputs: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         This method is the backward of the Maxout layer.
+
+        Args:
+            ctx: context containing tensors saved during ``forward``.
+            grad_outputs: upstream gradients with shape
+                ``[batch, output_dim]``.
+
+        Returns:
+            Gradients for ``inputs``, ``weights``, and ``bias`` with shapes
+            ``[batch, input_dim]``, ``[num_units, output_dim, input_dim]``,
+            and ``[num_units, output_dim]``, respectively.
         """
 
         # TODO
-
 
 class Maxout(torch.nn.Module):
     """
@@ -58,6 +78,16 @@ class Maxout(torch.nn.Module):
         self.fn = MaxoutFunction.apply
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the Maxout layer output.
+
+        Args:
+            inputs: input tensor with shape ``[batch, input_dim]``.
+
+        Returns:
+            Output tensor with shape ``[batch, output_dim]``.
+        """
+
         return self.fn(inputs, self.weights, self.bias)
 
     def reset_parameters(self) -> None:
@@ -66,4 +96,3 @@ class Maxout(torch.nn.Module):
         fan_in = self.input_dim
         bound = 1 / fan_in**0.5
         torch.nn.init.uniform_(self.bias, -bound, bound)
-

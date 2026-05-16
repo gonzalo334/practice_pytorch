@@ -54,3 +54,10 @@ class GroupNorm(torch.nn.Module):
 
         # TODO
 
+        B, C, H, W = inputs.shape
+        G = self.num_groups
+        inputs_grouped = inputs.view(B, G, C//G, H, W)
+        numerator = inputs_grouped - torch.mean(inputs_grouped, dim=(2,3,4)).view(B, G, 1, 1, 1)
+        denominator = torch.sqrt(torch.var(inputs_grouped, dim=(2,3,4), unbiased=False) + self.eps).view(B, G, 1, 1, 1)
+        outputs = numerator / denominator
+        return outputs.view(B, C, H, W)

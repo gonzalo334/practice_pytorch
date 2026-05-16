@@ -22,7 +22,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         stride: tuple[int, int],
         padding: tuple[int, int],
         output_padding: tuple[int, int],
-        groups: int,
         dilation: tuple[int, int],
     ) -> torch.Tensor:
         """
@@ -36,7 +35,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
             stride=stride,
             padding=padding,
             output_padding=output_padding,
-            groups=groups,
             dilation=dilation,
         )
 
@@ -44,7 +42,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         ctx.stride = stride
         ctx.padding = padding
         ctx.output_padding = output_padding
-        ctx.groups = groups
         ctx.dilation = dilation
 
         return outputs
@@ -56,7 +53,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        None,
         None,
         None,
         None,
@@ -78,7 +74,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
                 stride=ctx.stride,
                 padding=ctx.padding,
                 output_padding=ctx.output_padding,
-                groups=ctx.groups,
                 dilation=ctx.dilation,
             )
             grad_inputs, grad_weight, grad_bias = torch.autograd.grad(
@@ -91,7 +86,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
             grad_inputs,
             grad_weight,
             grad_bias,
-            None,
             None,
             None,
             None,
@@ -112,7 +106,6 @@ class ConvTranspose2d(torch.nn.Module):
         stride: int | tuple[int, int] = 1,
         padding: int | tuple[int, int] = 0,
         output_padding: int | tuple[int, int] = 0,
-        groups: int = 1,
         dilation: int | tuple[int, int] = 1,
         dtype: torch.dtype = torch.float32,
     ) -> None:
@@ -125,13 +118,12 @@ class ConvTranspose2d(torch.nn.Module):
         self.stride = self._pair(stride)
         self.padding = self._pair(padding)
         self.output_padding = self._pair(output_padding)
-        self.groups = groups
         self.dilation = self._pair(dilation)
 
         self.weight = torch.nn.Parameter(
             torch.empty(
                 in_channels,
-                out_channels // groups,
+                out_channels,
                 kernel_size[0],
                 kernel_size[1],
                 dtype=dtype,
@@ -154,7 +146,6 @@ class ConvTranspose2d(torch.nn.Module):
             self.stride,
             self.padding,
             self.output_padding,
-            self.groups,
             self.dilation,
         )
 
@@ -169,4 +160,3 @@ class ConvTranspose2d(torch.nn.Module):
         if isinstance(value, tuple):
             return value
         return (value, value)
-

@@ -31,6 +31,8 @@ def unfold1d(
     """
 
     # TODO
+    inputs_unfolded = torch.nn.functional.unfold(inputs.unsqueeze(-1), (kernel_size, 1), dilation, padding, stride)
+    return inputs_unfolded
 
 
 def fold1d(
@@ -58,8 +60,8 @@ def fold1d(
     """
 
     # TODO
-
-
+    inputs_folded = torch.nn.functional.fold(inputs, (output_size, 1), (kernel_size, 1), dilation, padding, stride)
+    return inputs_folded.squeeze()
 class Conv1dFunction(torch.autograd.Function):
     """
     Class to implement the forward and backward methods of the Conv1d
@@ -96,6 +98,19 @@ class Conv1dFunction(torch.autograd.Function):
         """
 
         # TODO
+        B, Cin, L = inputs.shape
+        Cout, Cin, K = weight.shape
+        Lout = (L + 2*padding - K) // stride + 1
+        inputs_unfolded = unfold1d(inputs, K, dilation, padding, stride) # B, Cin*K, Lout
+        weight_unfolded = weight.view(Cout, Cin*K).unsqueeze(0) # 1, Cout, Cin*K
+        bias_unfolded = bias.unsqueeze(0).unsqueeze(-1) # 1, Cout, 1
+        outputs = weight_unfolded @ inputs_unfolded + bias_unfolded # B, Cout, Lout
+        ctx.save_for_backward(inputs, weight)
+        ctx.padding = padding
+        ctx.stride = stride
+        ctx.dilation = dilation
+        return outputs
+        
 
     @staticmethod
     def backward(  # type: ignore
@@ -123,6 +138,20 @@ class Conv1dFunction(torch.autograd.Function):
         """
 
         # TODO
+        inputs, weight = ctx.saved_tensors
+        padding = ctx.padding
+        stride = ctx.stride 
+        dilation = ctx.dilation
+        B, Cin, L = inputs.shape
+        Cout, Cin, K = weight.shape
+        B, Cout, Lout = grad_output.shape
+        inputs_unfolded = unfold1d(inputs, K, dilation, padding, stride).transpose(1,2) # B, Lout, Cin*K
+        weight_unfolded = weight.view(Cout, Cin*K).T.unsqueeze(0) # 1, Cin*K, Cout
+        grad_inputs_unfolded = weight_unfolded @ grad_output # B, Cin*K, Lout
+        grad_weights = (grad_output @ inputs_unfolded).sum(dim=0).view(Cout, Cin, K)
+        grad_inputs = fold1d(grad_inputs_unfolded, L, K, dilation, padding, stride) # B, Cin, L
+        grad_bias = grad_output.sum(dim=(0,2))
+        return grad_inputs, grad_weights, grad_bias, None, None, None
 
 class Conv1d(torch.nn.Module):
     """

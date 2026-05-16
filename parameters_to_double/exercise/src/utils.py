@@ -19,6 +19,8 @@ def parameters_to_double(model: torch.nn.Module) -> None:
     """
 
     # TODO
+    for parameter in model.parameters():
+        parameter.data = parameter.data.double()
 
 
 def set_seed(seed: int) -> None:

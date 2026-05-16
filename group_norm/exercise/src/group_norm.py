@@ -51,7 +51,7 @@ class GroupNorm(torch.nn.Module):
         B, Cin = inputs.shape[0:2]
         outputs = torch.zeros_like(inputs, dtype=inputs.dtype)
         inputs_grouped = inputs.view(B, G, Cin // G, -1)
-        var = torch.var(inputs_grouped, dim=(2,3)).view(B, G, 1, 1)
+        var = torch.var(inputs_grouped, dim=(2,3), unbiased=False).view(B, G, 1, 1)
         mean = torch.mean(inputs_grouped, dim=(2,3)).view(B, G, 1, 1)
         denominator = torch.sqrt(var + self.eps)
         outputs = (inputs_grouped - mean) / denominator

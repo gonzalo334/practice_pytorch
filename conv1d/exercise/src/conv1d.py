@@ -31,22 +31,18 @@ class Conv1dFunction(torch.autograd.Function):
                 sequence length - kernel size + 1].
         """
 
-        # Get output size and define outputs
-        output_size: int = inputs.shape[2] - weight.shape[2] + 1
-        outputs: torch.Tensor = torch.zeros(
-            (inputs.shape[0], weight.shape[0], output_size), dtype=torch.double
-        )
-
-        # Iter over spatial dimension
-        for i in range(output_size):
-            outputs[:, :, i] = (
-                inputs[:, :, i : i + weight.shape[2]].unsqueeze(1) * weight.unsqueeze(0)
-            ).sum(dim=(2, 3))
-
-        # Save for backward
+        # TODO
+        B, C, L = inputs.shape
+        Cout, Cin, K = weight.shape
         ctx.save_for_backward(inputs, weight)
-
+        Lout = L - K + 1
+        outputs = torch.zeros((B, Cout, Lout), dtype=inputs.dtype)
+        weight = weight.view(1, Cout, 1, Cin*K)
+        for li in range(Lout):
+            window = inputs[:, :, li:li+K].contiguous().view(B, 1, Cin*K, 1) # B, 1, Cin*K, 1
+            outputs[:, :, li] = (weight @ window).squeeze()
         return outputs
+
 
     @staticmethod
     def backward(  # type: ignore
@@ -69,24 +65,29 @@ class Conv1dFunction(torch.autograd.Function):
                 kernel size].
         """
 
-        # Get tensors from forward
+        # TODO
         inputs, weight = ctx.saved_tensors
-
-        # Init grad inputs
+        inputs : torch.Tensor
+        weight : torch.Tensor
+        B, Cin, L = inputs.shape
+        Cout, Cin, K = weight.shape
+        Lout = L - K + 1
+        # B, Cout, Lout = grad_outputs.shape
+        grad_weight = torch.zeros_like(weight)
+        weight = weight.view(1, Cout, Cin*K)
         grad_inputs = torch.zeros_like(inputs)
-
-        # Iter over spatial dimension
-        for i in range(grad_outputs.shape[2]):
-            grad_inputs[:, :, i : i + weight.shape[2]] += (
-                grad_outputs[:, :, i].unsqueeze(1).unsqueeze(-1)
-                * weight.unsqueeze(0).permute(0, 2, 1, 3)
-            ).sum(dim=2)
-
-        grad_weight: torch.Tensor = (
-            grad_inputs.unsqueeze(1).unsqueeze(-2) * weight.unsqueeze(0).unsqueeze(-1)
-        ).sum(dim=(0, -1))
+        for li in range(Lout):
+            window = inputs[:,:, li:li+K].permute(1,2,0).contiguous().view(Cin*K, B).view(Cin*K, 1, B, 1)
+            grad_patch = grad_outputs[:, :, li] # B, Cout
+            grad_patch = grad_patch.T.view(1, Cout, 1, B)
+            grad_weight_folded = (grad_patch @ window).view(Cin, K, Cout).permute(2, 0, 1)
+            grad_weight += grad_weight_folded
+            grad_inputs[:, :, li:li+K] += (grad_outputs[:, :, li].unsqueeze(1) @ weight).view(B, Cin, K)
 
         return grad_inputs, grad_weight
+
+        
+
 
 
 class Conv1d(torch.nn.Module):
@@ -119,7 +120,6 @@ class Conv1d(torch.nn.Module):
         self.weight = torch.nn.Parameter(
             torch.rand((out_channels, in_channels, kernel_size), dtype=torch.double)
         )
-        self.shape = self.weight.shape
 
         # Set function
         self.fn = Conv1dFunction.apply
@@ -144,3 +144,7 @@ class Conv1d(torch.nn.Module):
         outputs: torch.Tensor = self.fn(inputs, self.weight)
 
         return outputs
+    
+    @property
+    def shape(self) -> torch.Size:
+        return self.weight.shape

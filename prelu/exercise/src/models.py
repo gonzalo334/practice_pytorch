@@ -19,7 +19,11 @@ def forward_prelu(inputs: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
     """
 
     # TODO
-
+    outputs = inputs.clone()
+    mask = inputs < 0
+    outputs[mask] *= a
+    return outputs
+    
 
 def backward_prelu(
     grad_output: torch.Tensor, inputs: torch.Tensor, a: torch.Tensor
@@ -38,6 +42,12 @@ def backward_prelu(
     """
 
     # TODO
+    mask = inputs <= 0
+    grad_inputs = grad_output.clone()
+    grad_inputs[mask] *= a
+    grad_a = (inputs[mask]*grad_output[mask]).sum()
+    return grad_inputs, grad_a
+
 
 
 class PReLUFunction(torch.autograd.Function):

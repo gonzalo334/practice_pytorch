@@ -7,3 +7,6 @@ The custom layer must normalize over the last `normalized_shape` dimensions and
 must match `torch.nn.LayerNorm`, including gradients with respect to inputs,
 weight and bias.
 
+Inputs have shape `[*B, *normalized_shape]`; `weight` and `bias` have shape
+`normalized_shape`. In the backward pass, return gradients for `inputs`,
+`weight`, and `bias`.

@@ -22,7 +22,6 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         stride: tuple[int, int],
         padding: tuple[int, int],
         output_padding: tuple[int, int],
-        groups: int,
         dilation: tuple[int, int],
     ) -> torch.Tensor:
         """
@@ -32,7 +31,7 @@ class ConvTranspose2dFunction(torch.autograd.Function):
             ctx: context for saving elements for the backward.
             inputs: input tensor. Dimensions: [batch, channels, height, width].
             weight: weights tensor. Dimensions:
-                [in channels, out channels // groups, kernel height, kernel width].
+                [in channels, out channels, kernel height, kernel width].
             bias: bias tensor. Dimensions: [out channels].
 
         Returns:
@@ -40,6 +39,23 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         """
 
         # TODO
+        ctx.save_for_backward(inputs, weight)
+        B, Cin, H, W = inputs.shape
+        Cin, Cout, Kh, Kw = weight.shape
+        Hout = (H - 1) * stride[0] - 2 * padding[0] + dilation[0] * (Kh - 1) + 1 + output_padding[0]
+        Wout = (W - 1) * stride[1] - 2 * padding[1] + dilation[1] * (Kw - 1) + 1 + output_padding[1] 
+        inputs = inputs.view(B, Cin, H*W)
+        weight = weight.view(1, Cin, Cout*Kh*Kw).transpose(1,2) # 1, Cout*Kh*Kw, Cin 
+        outputs = weight @ inputs # B, Cout*Kh*Kw, H*W
+        outputs_folded = F.fold(outputs, (Hout, Wout), (Kh, Kw), dilation, padding, stride) + bias.view(1,-1,1, 1)
+        
+        ctx.stride = stride
+        ctx.padding = padding
+        ctx.output_padding = output_padding
+        ctx.dilation = dilation
+
+        return outputs_folded
+
 
     @staticmethod
     def backward(  # type: ignore
@@ -52,14 +68,32 @@ class ConvTranspose2dFunction(torch.autograd.Function):
         None,
         None,
         None,
-        None,
     ]:
         """
         This method is the backward of the ConvTranspose2d layer.
         """
 
         # TODO
+        inputs, weight = ctx.saved_tensors
+        B, Cin, H, W = inputs.shape
+        Cin, Cout, Kh, Kw = weight.shape
+        B, Cout, Hout, Wout = grad_outputs.shape 
+        stride = ctx.stride
+        padding = ctx.padding 
+        output_padding = ctx.output_padding 
+        dilation = ctx.dilation
 
+        grad_outputs_unfolded = F.unfold(grad_outputs, (Kh, Kw), dilation, padding, stride) # B, Cout*Kh*Kw, H*W
+        
+        inputs = inputs.view(B, Cin, H*W)
+        grad_weight = (inputs @ grad_outputs_unfolded.transpose(1,2)).sum(dim=0).view(Cin, Cout, Kh, Kw) 
+
+        weight = weight.view(1, Cin, Cout*Kh*Kw)
+        grad_inputs = (weight @ grad_outputs_unfolded).view(B, Cin, H, W)
+
+        grad_bias = grad_outputs.sum(dim=(0,2,3))
+
+        return grad_inputs, grad_weight, grad_bias, None, None, None, None
 
 class ConvTranspose2d(torch.nn.Module):
     """
@@ -74,7 +108,6 @@ class ConvTranspose2d(torch.nn.Module):
         stride: int | tuple[int, int] = 1,
         padding: int | tuple[int, int] = 0,
         output_padding: int | tuple[int, int] = 0,
-        groups: int = 1,
         dilation: int | tuple[int, int] = 1,
         dtype: torch.dtype = torch.float32,
     ) -> None:
@@ -87,13 +120,12 @@ class ConvTranspose2d(torch.nn.Module):
         self.stride = self._pair(stride)
         self.padding = self._pair(padding)
         self.output_padding = self._pair(output_padding)
-        self.groups = groups
         self.dilation = self._pair(dilation)
 
         self.weight = torch.nn.Parameter(
             torch.empty(
                 in_channels,
-                out_channels // groups,
+                out_channels,
                 kernel_size[0],
                 kernel_size[1],
                 dtype=dtype,
@@ -116,7 +148,6 @@ class ConvTranspose2d(torch.nn.Module):
             self.stride,
             self.padding,
             self.output_padding,
-            self.groups,
             self.dilation,
         )
 
@@ -131,4 +162,3 @@ class ConvTranspose2d(torch.nn.Module):
         if isinstance(value, tuple):
             return value
         return (value, value)
-

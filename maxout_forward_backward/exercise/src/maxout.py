@@ -35,22 +35,13 @@ class MaxoutFunction(torch.autograd.Function):
         # TODO
         B, Din = inputs.shape
         Dout, Din = weights_first.shape
-        num_units = 2
-        # z = torch.zeros(B, num_units, Dout) # Esto no es posible ya que z1 y z2 pueden tener diferentes dimensiones?
-        # z[:, 0, :] = inputs @ weights_first.T + bias_first
-        # z[:, 1, :] = inputs @ weights_second.T + bias_second
-        
-        # z = torch.zeros(num_units, B, Dout) # Esto no es posible ya que z1 y z2 pueden tener diferentes dimensiones?
-        # z[0, :, :] = inputs @ weights_first.T + bias_first
-        # z[1, :, :] = inputs @ weights_second.T + bias_second
-        
-        z1 = inputs @ weights_first.T + bias_first
-        z2 = inputs @ weights_second.T + bias_second
-        z = torch.concatenate((z1.unsqueeze(1), z2.unsqueeze(1)), dim=1)
-
-        outputs, indices = torch.max(z, dim=1)
+        # Dout = bias_first.shape
+        z1 = inputs @ weights_first.T + bias_first.unsqueeze(0) 
+        z2 = inputs @ weights_second.T + bias_second.unsqueeze(0) 
+        z = torch.concat((z1.unsqueeze(1), z2.unsqueeze(1)), dim=1)
+        outputs, indexes = torch.max(z, dim=1)
         mask = z1 > z2
-        ctx.save_for_backward(indices, mask, inputs, weights_first, weights_second)
+        ctx.save_for_backward(inputs, weights_first, weights_second, bias_first, bias_second, mask)
         return outputs
 
 
@@ -79,21 +70,22 @@ class MaxoutFunction(torch.autograd.Function):
         """
 
         # TODO
-        indices, mask, inputs, weights_first, weights_second = ctx.saved_tensors
+        inputs, weights_first, weights_second, bias_first, bias_second, mask = ctx.saved_tensors
         B, Din = inputs.shape
         Dout, Din = weights_first.shape
-        B, Dout = grad_output.shape
+        # B, Dout = grad_output.shape
 
+        grad_inputs = (grad_output*mask) @ weights_first + (grad_output * (~mask)) @ weights_second
+
+        grad_weight_first = (grad_output*mask).T @ inputs
+        grad_weight_second = (grad_output*(~mask)).T @ inputs
 
         grad_bias_first = (grad_output*mask).sum(dim=0)
         grad_bias_second = (grad_output*(~mask)).sum(dim=0)
 
-        grad_inputs = (grad_output*mask) @ weights_first + grad_output*(~mask) @ weights_second
+        return grad_inputs, grad_weight_first, grad_bias_first, grad_weight_second, grad_bias_second
 
-        grad_weights_first = (grad_output*mask).T @ inputs
-        grad_weights_second = (grad_output*(~mask)).T @ inputs
 
-        return grad_inputs, grad_weights_first, grad_bias_first, grad_weights_second, grad_bias_second
 
 
 

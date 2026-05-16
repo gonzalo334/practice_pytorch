@@ -43,21 +43,15 @@ class Conv2dFunction(torch.autograd.Function):
         """
         B, Cin, H, W = inputs.shape
         Cout, Cin, K, K = weight.shape
-        Hout = (H + 2*padding - K) // stride + 1
-        Wout = (W + 2*padding - K) // stride + 1
-
+        # Cout = bias.shape
+        Hout, Wout = (H + 2*padding - K) // stride + 1, (W + 2*padding - K) // stride + 1
         inputs_unfolded = torch.nn.functional.unfold(inputs, K, padding=padding, stride=stride) # B, Cin*K*K, Hout*Wout
-        weight_windows = weight.view(Cout, Cin*K*K).unsqueeze(0) # 1, Cout, Cin*K*K
-        bias = bias.unsqueeze(0).unsqueeze(-1) # 1, Cout, 1
-        outputs = weight_windows @ inputs_unfolded + bias # B, Cout, Hout*Wout
-        outputs = outputs.view(B, Cout, Hout, Wout)
-
-        ctx.save_for_backward(inputs, weight)   # bias no se necesita ya que su derivada es 1
+        weight_unfolded = weight.view(1, Cout, -1) # 1, Cout, Cin*K*K
+        outputs = weight_unfolded @ inputs_unfolded + bias.unsqueeze(0).unsqueeze(-1)
+        ctx.save_for_backward(inputs, weight)
         ctx.padding = padding
         ctx.stride = stride
-        
-        return outputs
-    
+        return outputs.view(B, Cout, Hout, Wout)
     @staticmethod
     def backward(  # type: ignore
         ctx, grad_output: torch.Tensor
@@ -82,23 +76,25 @@ class Conv2dFunction(torch.autograd.Function):
             None.
         """
         inputs, weight = ctx.saved_tensors
-        padding = ctx.padding
         stride = ctx.stride
-        B, Cin, H, W = inputs.shape
+        padding = ctx.padding
         Cout, Cin, K, K = weight.shape
-        B, Cout, Hout, Wout = grad_output.shape
-        
+        B, Cin, H, W = inputs.shape
+        # B, Cout, Hout, Wout = grad_output.shape
+        # Cout = bias.shape
+        Hout, Wout = (H + 2*padding - K) // stride + 1, (W + 2*padding - K) // stride + 1
         inputs_unfolded = torch.nn.functional.unfold(inputs, K, padding=padding, stride=stride) # B, Cin*K*K, Hout*Wout
-        weight_unfolded = weight.view(Cout, Cin*K*K)    # Cout, Cin*K*K
-        grad_output_unfolded = grad_output.view(B, Cout, Hout*Wout) # B, Cout, Hout*Wout
+    
+        weight_unfolded = weight.view(1, Cout, -1) # 1, Cout, Cin*K*K
+        grad_outputs_unfolded = grad_output.view(B, Cout, Hout*Wout)
+        grad_inputs_unfolded = weight_unfolded.transpose(1,2) @ grad_outputs_unfolded # B, Cin*K*K, Hout*Wout
+        grad_inputs = torch.nn.functional.fold(grad_inputs_unfolded, (H, W), K, padding=padding, stride=stride) # B, Cin, H, W 
+    
 
-        grad_inputs_unfolded = weight_unfolded.T @ grad_output_unfolded  # B, Cin*K*K, Hout*Wout
-        grad_inputs = torch.nn.functional.fold(grad_inputs_unfolded, output_size=(H,W), kernel_size=K, padding=padding, stride=stride) # B, Cin*K*K, Hout*Wout
+        grad_weights_batches = inputs_unfolded @ grad_outputs_unfolded.transpose(1,2) # B, Cin*K*K, Cout
+        grad_weights = grad_weights_batches.sum(dim=0).view(Cin*K*K, Cout).T.view(Cout, Cin, K, K)
 
-        grad_weight = grad_output_unfolded @ inputs_unfolded.transpose(1,2) # B, Cout, Cin*K*K 
-        grad_weight = grad_weight.sum(dim=0).view(Cout, Cin, K, K)  # Cin, Cout, K, K
-        
-        grad_bias = grad_output.sum(dim=(0,2,3)) # Cout 
+        grad_bias = grad_output.sum(dim=(0,2,3))
 
-        return grad_inputs, grad_weight, grad_bias, None, None
 
+        return grad_inputs, grad_weights, grad_bias, None, None

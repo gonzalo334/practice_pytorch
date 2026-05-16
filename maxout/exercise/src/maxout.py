@@ -33,12 +33,10 @@ class MaxOut(torch.nn.Module):
         super().__init__()
 
         # TODO
-        self.num_units = num_units
-
         self.weight = torch.nn.Parameter(
-            torch.randn((num_units, output_dim, input_dim), dtype=torch.float64)
+            torch.rand((num_units, output_dim, input_dim), dtype=torch.float64)
         )
-
+        self.num_units = num_units
 
     def reshape_inputs(self, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -54,12 +52,10 @@ class MaxOut(torch.nn.Module):
         """
 
         # TODO
-        B, Din = inputs.shape
         K = self.num_units
-        inputs_repeated = inputs.unsqueeze(1).repeat(1, K, 1)
-        inputs_reshaped = inputs_repeated.view(K * B, 1, Din)
+        B, Din = inputs.shape
+        inputs_reshaped = inputs.view(1,B,1,Din).repeat(K, 1, 1, 1).view(K*B, 1, Din)
         return inputs_reshaped
-
 
     def reshape_weight(self, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -74,13 +70,11 @@ class MaxOut(torch.nn.Module):
         """
 
         # TODO
+        K = self.num_units
         B, Din = inputs.shape
         K, Dout, Din = self.weight.shape
-        weight_view = self.weight.view(1, K, Dout, Din)
-        weight_reshaped = weight_view.repeat(B, 1, 1, 1).view(B*K, Dout, Din)
-        return weight_reshaped.transpose(1,2)
-
-
+        weight_reshaped = self.weight.view(K, 1, Dout, Din).repeat(1, B, 1, 1).view(K*B, Dout, Din)
+        return weight_reshaped.transpose(1,2) # K*B, Din, Dout
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
         """
@@ -95,10 +89,9 @@ class MaxOut(torch.nn.Module):
 
         # TODO
         B, Din = inputs.shape
-        inputs_reshaped = self.reshape_inputs(inputs) # B*K, 1, Din
-        weights_reshaped = self.reshape_weight(inputs) # B*K, Din, Dout
-        z = torch.bmm(inputs_reshaped, weights_reshaped) # B*K, 1, Dout
-        h = z.view(B, self.num_units, -1) # B, K, Dout
-        outputs = torch.amax(h, dim=1) # B, Dout
+        K, Dout, Din = self.weight.shape
+        inputs_reshaped = self.reshape_inputs(inputs) # K*B, 1, Din
+        weight_reshaped = self.reshape_weight(inputs) #K*B, Din, Dout
+        outputs_units = torch.bmm(inputs_reshaped, weight_reshaped).view(K, B, Dout) # K, B, Dout
+        outputs = torch.amax(outputs_units, dim=(0)) 
         return outputs
-

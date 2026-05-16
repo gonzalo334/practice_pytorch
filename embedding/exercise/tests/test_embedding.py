@@ -13,7 +13,7 @@ from src.utils import set_seed
 @pytest.mark.order(3)
 @pytest.mark.parametrize(
     "shape, num_embeddings, embedding_dim, padding_idx",
-    [((64,), 20, 32, None), ((128,), 64, 16, 2)],
+    [((64,), 20, 32, 13), ((128,), 64, 16, 3)],
 )
 def test_embedding(
     shape: tuple[int, ...],

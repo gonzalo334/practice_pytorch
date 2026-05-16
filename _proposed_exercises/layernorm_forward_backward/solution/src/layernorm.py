@@ -21,6 +21,17 @@ class LayerNormFunction(torch.autograd.Function):
     ) -> torch.Tensor:
         """
         This is the forward method of LayerNorm.
+
+        Args:
+            ctx: context used to save tensors for the backward pass.
+            inputs: input tensor with shape ``[*B, *normalized_shape]``.
+            weight: learnable scale with shape ``normalized_shape``.
+            bias: learnable offset with shape ``normalized_shape``.
+            normalized_shape: last dimensions to normalize.
+            eps: small constant for numerical stability.
+
+        Returns:
+            Output tensor with the same shape as ``inputs``.
         """
 
         dims = tuple(range(inputs.dim() - len(normalized_shape), inputs.dim()))
@@ -42,6 +53,13 @@ class LayerNormFunction(torch.autograd.Function):
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, None, None]:
         """
         This method is the backward of LayerNorm.
+
+        Args:
+            ctx: context containing tensors saved during ``forward``.
+            grad_outputs: upstream gradients with the same shape as ``inputs``.
+
+        Returns:
+            Gradients for ``inputs``, ``weight``, and ``bias``.
         """
 
         normalized, inv_std, weight = ctx.saved_tensors
@@ -91,9 +109,18 @@ class LayerNorm(torch.nn.Module):
         self.fn = LayerNormFunction.apply
 
     def forward(self, inputs: torch.Tensor) -> torch.Tensor:
+        """
+        Compute the LayerNorm output.
+
+        Args:
+            inputs: input tensor with shape ``[*B, *normalized_shape]``.
+
+        Returns:
+            Output tensor with the same shape as ``inputs``.
+        """
+
         return self.fn(inputs, self.weight, self.bias, self.normalized_shape, self.eps)
 
     def reset_parameters(self) -> None:
         torch.nn.init.ones_(self.weight)
         torch.nn.init.zeros_(self.bias)
-

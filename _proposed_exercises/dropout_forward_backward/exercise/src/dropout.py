@@ -22,7 +22,16 @@ class DropoutFunction(torch.autograd.Function):
         """
 
         # TODO
+        
+        if not training or p == 0:
+            mask = torch.ones_like(inputs)
+            ctx.save_for_backward(mask)
+            return inputs * mask
 
+        mask = (torch.rand_like(inputs) > p).to(int) / (1-p)
+        ctx.save_for_backward(mask)
+        return inputs * mask
+        
     @staticmethod
     def backward(  # type: ignore
         ctx: Any, grad_outputs: torch.Tensor
@@ -32,6 +41,8 @@ class DropoutFunction(torch.autograd.Function):
         """
 
         # TODO
+        mask, = ctx.saved_tensors
+        return grad_outputs * mask, None, None
 
 
 class Dropout(torch.nn.Module):

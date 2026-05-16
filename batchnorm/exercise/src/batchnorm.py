@@ -48,24 +48,16 @@ class BatchNorm2dFunction(torch.autograd.Function):
             Outputs tensor. Dimensions: [batch, channels, height,
                 width], same as inputs.
         """
-        B, Cin, H, W = inputs.shape        
-        
-        running_mean = running_mean.unsqueeze(0).unsqueeze(-1).unsqueeze(-1) 
-        running_var = running_var.unsqueeze(0).unsqueeze(-1).unsqueeze(-1) 
 
-        x = inputs - running_mean
+        # TODO
+        x = inputs - running_mean.view(1, -1, 1, 1)
         mask = x < 0
-        x[mask] = x[mask] * negative_slope
-
-        denominator = torch.sqrt(running_var + eps)
-
-        outputs = x / denominator
-
-
-        ctx.save_for_backward(inputs, mask)
-        ctx.denominator = denominator
+        numerator = x.clone()
+        numerator[mask] = numerator[mask] * negative_slope
+        denominator = torch.sqrt(running_var.view(1, -1, 1, 1) + eps)
+        outputs = numerator / denominator
+        ctx.save_for_backward(mask, denominator)
         ctx.negative_slope = negative_slope
-
         return outputs
     
     @staticmethod
@@ -87,20 +79,15 @@ class BatchNorm2dFunction(torch.autograd.Function):
             None.
             None.
         """
-        inputs, mask = ctx.saved_tensors
-        denominator = ctx.denominator
+        
+        # TODO
+        mask, denominator = ctx.saved_tensors
         negative_slope = ctx.negative_slope
+        grad_inputs = grad_outputs.clone() / denominator
 
-
-        grad_inputs = torch.zeros_like(inputs)
-
-        grad_inputs[mask] = grad_outputs[mask] * negative_slope
-        grad_inputs[~mask] = grad_outputs[~mask]
-
-        grad_inputs /= denominator
+        grad_inputs[mask] *= negative_slope
 
         return grad_inputs, None, None, None, None
-        
 
 
 class BatchNorm2d(torch.nn.Module):

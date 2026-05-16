@@ -19,10 +19,10 @@ def forward_prelu(inputs: torch.Tensor, a: torch.Tensor) -> torch.Tensor:
         outputs tensor. Dimensions: [*], same as inputs.
     """
 
-    # compute forward
+    # TODO
+    mask = inputs <= 0
     outputs = inputs.clone()
-    outputs[inputs <= 0] = a * outputs[inputs <= 0]
-
+    outputs[mask] *= a.item()
     return outputs
 
 
@@ -42,16 +42,12 @@ def backward_prelu(
         a gradients. Dimensions: [0], same as the a parameter.
     """
 
-    # compute input gradients
-    grad_input: torch.Tensor = torch.ones_like(inputs)
-    grad_input[inputs <= 0] = a
-    grad_input *= grad_output
-
-    # compute a gradients
-    grad_a: torch.Tensor = torch.sum(inputs[inputs <= 0] * grad_output[inputs <= 0])
-
-    return grad_input, grad_a
-
+    # TODO
+    mask = inputs <= 0 # no se por que se necesita el igual
+    grad_inputs = grad_output.clone()
+    grad_inputs[mask] *= a
+    grad_a = (inputs[mask] * grad_output[mask]).sum()
+    return grad_inputs, grad_a
 
 class PReLUFunction(torch.autograd.Function):
     """
@@ -129,7 +125,7 @@ class PReLU(torch.nn.Module):
         This is the forward pass for the class.
 
         Args:
-            inputs: inputs tensor. Dimensions: [*].
+            inputs: inputs tensor. Dimensions: [batch, *].
 
         Returns:
             outputs tensor. Dimensions: [*] (same as the input).
@@ -169,9 +165,13 @@ class ResidualFunction(torch.autograd.Function):
         """
 
         # save elements for backward
-        ctx.save_for_backward(inputs, weight, bias, a)
 
         # TODO
+        B, Din = inputs.shape
+        inputs_prelu = inputs @ weight.T + bias.unsqueeze(0)
+        outputs = forward_prelu(inputs_prelu, a) + inputs
+        ctx.save_for_backward(inputs, weight, bias, a, inputs_prelu)
+        return outputs 
 
     @staticmethod
     @torch.no_grad()
@@ -193,9 +193,15 @@ class ResidualFunction(torch.autograd.Function):
         """
 
         # load elements from forward
-        inputs, weight, bias, a = ctx.saved_tensors
+        inputs, weight, bias, a, inputs_prelu = ctx.saved_tensors
 
         # TODO
+        grad_inputs_prelu, grad_a = backward_prelu(grad_output, inputs_prelu, a)
+        grad_inputs = grad_inputs_prelu @ weight + grad_output
+        grad_weight =  grad_inputs_prelu.T @ inputs
+        grad_bias = grad_inputs_prelu.sum(dim=0)
+
+        return grad_inputs, grad_weight, grad_bias, grad_a
 
 
 class Residual(torch.nn.Module):

@@ -29,6 +29,11 @@ class HardshrinkFunction(torch.autograd.Function):
         """
 
         # TODO
+        mask = torch.abs(inputs) > lambd
+        outputs = inputs.clone()
+        outputs[~mask] = 0
+        ctx.save_for_backward(mask, outputs)
+        return outputs
 
     @staticmethod
     def backward(  # type: ignore
@@ -47,6 +52,10 @@ class HardshrinkFunction(torch.autograd.Function):
         """
 
         # TODO
+        mask, inputs = ctx.saved_tensors
+        grad_inputs = torch.zeros_like(inputs) 
+        grad_inputs[mask] = grad_output[mask]
+        return grad_inputs, None
 
 
 

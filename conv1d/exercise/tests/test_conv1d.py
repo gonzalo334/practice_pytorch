@@ -7,7 +7,7 @@ import torch
 import pytest
 
 # Own modules
-from src.conv1d import Conv1d
+from exercise.src.conv1d import Conv1d
 
 
 @pytest.mark.parametrize("out_channels, kernel_size", [(10, 3), (5, 5)])

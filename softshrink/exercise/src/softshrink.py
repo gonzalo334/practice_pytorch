@@ -2,7 +2,7 @@
 import torch
 
 # other libraries
-from typing import Any, Optional
+from typing import Any
 
 
 class SoftshrinkFuncion(torch.autograd.Function):
@@ -28,7 +28,15 @@ class SoftshrinkFuncion(torch.autograd.Function):
             outputs tensor. Dimensions: [batch, *].
         """
 
-        # TODO
+        mask1 = inputs > lambd
+        mask2 = inputs < -lambd
+
+        outputs = torch.zeros_like(inputs)
+        outputs[mask1] = inputs[mask1] - lambd
+        outputs[mask2] = inputs[mask2] + lambd
+
+        ctx.save_for_backward(mask1, mask2)
+        return outputs
 
     @staticmethod
     def backward(  # type: ignore
@@ -45,7 +53,10 @@ class SoftshrinkFuncion(torch.autograd.Function):
             inputs gradients. Dimensions: [batch, *].
         """
 
-        # TODO
+        mask1, mask2 = ctx.saved_tensors
+        grad_inputs = torch.zeros_like(grad_outputs)
+        grad_inputs[mask1 | mask2] = grad_outputs[mask1 | mask2]
+        return grad_inputs
 
 
 class Softshrink(torch.nn.Module):
