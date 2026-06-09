@@ -42,28 +42,33 @@ parameters over time.
 Most folders are self-contained exercises. The common structure is:
 
 ```text
-exercise_name/
-  exercise/
-    src/        # Implementation target
-    tests/      # Pytest tests for the exercise
-    README.md   # Problem statement and constraints
-  solution/
-    src/        # Reference or completed solution
-    tests/      # Matching tests
-    README.md
+exercises/
+  core/                 # Original practice set
+    exercise_name/
+      exercise/
+        src/            # Implementation target
+        tests/          # Pytest tests for the exercise
+        README.md       # Problem statement and constraints
+      solution/
+        src/            # Reference or completed solution
+        tests/          # Matching tests
+        README.md
+  advanced/             # Extended and proposed exercises
+    exercise_name/
+      exercise/
+      solution/
 ```
 
 Some earlier exercises use a flatter layout:
 
 ```text
-exercise_name/
+exercises/core/exercise_name/
   src/
   tests/
 ```
 
-The `_proposed_exercises/` directory contains additional or more advanced drills
-I explored beyond the initial set. These generally follow the same
-`exercise/solution` pattern.
+The root stays intentionally small: documentation, Git metadata, and the
+organized exercise tree.
 
 ## Exercise Index
 
@@ -108,7 +113,7 @@ the listed requirements and run the tests.
 Example:
 
 ```bash
-cd maxout/exercise
+cd exercises/core/maxout/exercise
 pip install -r requirements.txt
 pytest
 ```
@@ -116,7 +121,7 @@ pytest
 Some folders include a `test.sh` helper:
 
 ```bash
-cd adagrad/exercise
+cd exercises/core/adagrad/exercise
 bash test.sh
 ```
 
@@ -127,15 +132,16 @@ usually the most convenient path.
 
 If you are reviewing this as part of a portfolio, these folders give a good tour:
 
-1. `maxout/` and `maxout_forward_backward/` for activation design and gradient
-   routing.
-2. `conv1d/`, `conv2d_forward/`, and `_proposed_exercises/conv3d_*` for tensor
-   shape reasoning.
-3. `batchnorm/`, `group_norm/`, and `_proposed_exercises/layernorm_forward_backward/`
-   for normalization mechanics.
-4. `adagrad/`, `nadam/`, `_proposed_exercises/rmsprop/`, and
-   `_proposed_exercises/adamw/` for optimizer internals.
-5. `_proposed_exercises/scaled_dot_product_attention_forward_backward/` for a
+1. `exercises/core/maxout/` and `exercises/core/maxout_forward_backward/` for
+   activation design and gradient routing.
+2. `exercises/core/conv1d/`, `exercises/core/conv2d_forward/`, and
+   `exercises/advanced/conv3d_*` for tensor shape reasoning.
+3. `exercises/core/batchnorm/`, `exercises/core/group_norm/`, and
+   `exercises/advanced/layernorm_forward_backward/` for normalization mechanics.
+4. `exercises/core/adagrad/`, `exercises/core/nadam/`,
+   `exercises/advanced/rmsprop/`, and `exercises/advanced/adamw/` for optimizer
+   internals.
+5. `exercises/advanced/scaled_dot_product_attention_forward_backward/` for a
    compact bridge toward transformer components.
 
 ## Development Notes
